@@ -4,7 +4,7 @@ import { markAsFinished } from "./updateMessage.js";
 
 export function startScheduler() {
   cron.schedule(
-    "17 18 * * *",
+    "00 10 * * *",
     async () => {
       console.log("Running test CodeWars challenge at 18:10 Europe/Kyiv");
       await postRandomChallenge();
@@ -15,7 +15,7 @@ export function startScheduler() {
   );
 
   cron.schedule(
-    "18 18 * * *",
+    "30 10 * * *",
     async () => {
       console.log("Marking as finished at 18:11 Europe/Kyiv");
       await markAsFinished();
