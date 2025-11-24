@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts"
+    "run:challenge": "node dist/run-challenge.js",
+    "run:finished": "node dist/run-finished.js"
   },
   "dependencies": {
     "@slack/web-api": "^7.0.0",
