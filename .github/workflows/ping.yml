@@ -1,0 +1,14 @@
+name: Ping cron test
+
+on:
+  schedule:
+    - cron: "* * * * *" # кожну хвилину, UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print time
+        run: echo "Ping from cron at $(date)"
