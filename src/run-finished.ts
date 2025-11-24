@@ -1,4 +1,4 @@
-import { markAsFinished } from "./updateMessage";
+import { markAsFinished } from "./updateMessage.js";
 
 (async () => {
   try {

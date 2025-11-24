@@ -1,4 +1,4 @@
-import { postRandomChallenge } from "./postChallenge";
+import { postRandomChallenge } from "./postChallenge.js";
 
 (async () => {
   try {
