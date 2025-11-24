@@ -41,7 +41,7 @@ export async function markAsFinished() {
   const oldText = (challengeMsg.text || "") as string;
 
   if (!oldText.includes("UPD: Finished")) {
-    const updatedText = `${oldText}\n\n*UPD: Finished:white_check_mark:*`;
+    const updatedText = `*UPD: Finished:white_check_mark:*\n\n${oldText}`;
 
     await client.chat.update({
       channel: CHANNEL,
