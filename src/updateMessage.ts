@@ -1,62 +1,87 @@
 import { WebClient } from "@slack/web-api";
 import dotenv from "dotenv";
-import fs from "fs";
 import { challenges } from "./challenges.js";
 import { postSolution } from "./postSolution.js";
 
 dotenv.config();
 
 const client = new WebClient(process.env.SLACK_BOT_TOKEN);
-const STATE_PATH = "./src/state/lastMessage.json";
+const CHANNEL = process.env.SLACK_CHANNEL_ID!;
 
 export async function markAsFinished() {
-  if (!fs.existsSync(STATE_PATH)) return;
+  if (!CHANNEL) {
+    throw new Error("SLACK_CHANNEL_ID is not set");
+  }
 
-  const state = JSON.parse(fs.readFileSync(STATE_PATH, "utf-8"));
-  const { ts, challengeIndex } = state;
+  console.log("[markAsFinished] Starting at", new Date().toISOString());
 
-  if (!ts) return;
+  const auth = await client.auth.test();
+  const botUserId = auth.user_id;
 
-  // 1. Додаємо UPD у головне повідомлення
-  const original = await client.conversations.replies({
-    channel: process.env.SLACK_CHANNEL_ID!,
-    ts,
-    limit: 1,
+  const history = await client.conversations.history({
+    channel: CHANNEL,
+    limit: 100,
   });
 
-  const oldText = original.messages?.[0]?.text || "";
+  const messages = (history.messages ?? []) as any[];
 
-  const updatedText = `
-*UPD: Finished :white_check_mark:*
-${oldText}
-`.trim();
-
-  await client.chat.update({
-    channel: process.env.SLACK_CHANNEL_ID!,
-    ts,
-    text: updatedText,
+  const challengeMsg = messages.find((m) => {
+    const text = (m.text || "") as string;
+    return m.user === botUserId && /codewars/i.test(text);
   });
 
-  console.log("Challenge marked as finished.");
+  if (!challengeMsg || !challengeMsg.ts) {
+    console.log(
+      "[markAsFinished] No CodeWars message found, nothing to update"
+    );
+    return;
+  }
 
-  // 2. Тепер надсилаємо solution у тред
-  if (challengeIndex === undefined || challengeIndex === null) {
-    console.error("challengeIndex is missing in state");
+  const ts = challengeMsg.ts as string;
+  const oldText = (challengeMsg.text || "") as string;
+
+  if (!oldText.includes("UPD: Finished")) {
+    const updatedText = `${oldText}\n\n*UPD: Finished:white_check_mark:*`;
+
+    await client.chat.update({
+      channel: CHANNEL,
+      ts,
+      text: updatedText,
+    });
+
+    console.log("[markAsFinished] Main message updated");
+  } else {
+    console.log("[markAsFinished] Message already marked as finished");
+  }
+
+  const urlMatch = oldText.match(/https?:\/\/\S*codewars\.com\/kata\/\S*/i);
+
+  if (!urlMatch) {
+    console.log(
+      "[markAsFinished] No CodeWars URL in message, skipping solution"
+    );
+    return;
+  }
+
+  const url = urlMatch[0].replace(/[>\)\]\.,]+$/, "");
+
+  const challengeIndex = challenges.findIndex((c) => c.url === url);
+
+  if (challengeIndex === -1) {
+    console.log("[markAsFinished] Challenge not found by URL:", url);
     return;
   }
 
   const challenge = challenges[challengeIndex];
-  if (!challenge) {
-    console.error(`Challenge at index ${challengeIndex} not found`);
-    return;
-  }
 
   if (!challenge.solution) {
-    console.error(`Challenge at index ${challengeIndex} has no solution`);
+    console.log(
+      "[markAsFinished] Challenge has no solution field, skipping solution"
+    );
     return;
   }
 
   await postSolution(challenge, ts);
 
-  console.log("Solution sent in thread.");
+  console.log("[markAsFinished] Solution sent in thread for ts =", ts);
 }

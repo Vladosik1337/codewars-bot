@@ -1,57 +1,76 @@
 import { WebClient } from "@slack/web-api";
 import dotenv from "dotenv";
-import fs from "fs";
 import { challenges } from "./challenges.js";
 import { buildChallengeMessage } from "./templates/challengeMessage.js";
 
 dotenv.config();
 
 const client = new WebClient(process.env.SLACK_BOT_TOKEN);
-const STATE_PATH = "./src/state/lastMessage.json";
+const CHANNEL = process.env.SLACK_CHANNEL_ID!;
+const HISTORY_LIMIT = 200;
 
-function loadState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_PATH, "utf-8"));
-  } catch {
-    return { used: [] };
-  }
+async function getBotUserId() {
+  const auth = await client.auth.test();
+  return auth.user_id;
 }
 
-function saveState(state: any) {
-  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
+async function getUsedChallengeUrls(channelId: string, botUserId: string) {
+  const used = new Set<string>();
+
+  const history = await client.conversations.history({
+    channel: channelId,
+    limit: HISTORY_LIMIT,
+  });
+
+  const messages = (history.messages ?? []) as any[];
+
+  for (const msg of messages) {
+    const text = (msg.text || "") as string;
+
+    if (msg.user !== botUserId) continue;
+
+    const match = text.match(/https?:\/\/\S*codewars\.com\/kata\/\S*/i);
+    if (!match) continue;
+
+    const url = match[0].replace(/[>\)\]\.,]+$/, "");
+    used.add(url);
+  }
+
+  return used;
 }
 
 export async function postRandomChallenge() {
-  const state = loadState();
-  const used: number[] = state.used ?? [];
-
-  if (used.length >= challenges.length) {
-    used.length = 0;
+  if (!CHANNEL) {
+    throw new Error("SLACK_CHANNEL_ID is not set");
   }
 
-  let idx: number;
-  const available = challenges
-    .map((ch, i) => i)
-    .filter((i) => !used.includes(i));
+  const botUserId = await getBotUserId();
+  const usedUrls = await getUsedChallengeUrls(CHANNEL!, botUserId!);
 
-  idx = available[Math.floor(Math.random() * available.length)];
+  console.log("[postRandomChallenge] Used URLs:", usedUrls);
 
-  used.push(idx);
-  state.used = used;
+  const unused = challenges.filter((ch) => !usedUrls.has(ch.url));
 
-  const challenge = challenges[idx];
+  if (unused.length === 0) {
+    console.error("[postRandomChallenge] ❌ No unused challenges left!");
+    throw new Error("All challenges have already been used. Add new ones.");
+  }
+
+  const idx = Math.floor(Math.random() * unused.length);
+  const challenge = unused[idx];
+
   const message = buildChallengeMessage(challenge);
 
   const res = await client.chat.postMessage({
-    channel: process.env.SLACK_CHANNEL_ID!,
+    channel: CHANNEL,
     text: message,
-    parse: "full", // замість mrkdwn (фікс твоєї помилки)
+    mrkdwn: true,
   });
 
-  // Зберігаємо ts + used + challengeIndex
-  saveState({ ts: res.ts, used, challengeIndex: idx });
-
-  console.log("Challenge posted:", challenge.title);
-  console.log("Saved ts:", res.ts);
-  console.log("Saved challengeIndex:", idx);
+  console.log(
+    "[postRandomChallenge] Sent challenge:",
+    challenge.title,
+    "ts =",
+    res.ts
+  );
 }
