@@ -1,8 +1,6 @@
 name: Post CodeWars Challenge
 
 on:
-  schedule:
-    - cron: "* * * * *" # кожну хвилину, UTC
   workflow_dispatch: {}
 
 jobs:
